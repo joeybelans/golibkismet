@@ -50,9 +50,11 @@ func Connect(host string, port int, debugFlag bool) {
 		go listen()
 
 		// Wait until the connection is initialized
-		for tstamp == "" {
+		if tstamp == "" {
 			time.Sleep(1 * time.Second)
 		}
+		// Implement code blocking
+		blocking()
 	}
 }
 
@@ -79,4 +81,10 @@ func listen() {
 			fmt.Println("UNKNOWN CMD: " + fields[0])
 		}
 	}
+}
+
+// Implement execution blocking
+func blocking() {
+	b := make(chan struct{})
+	<-b
 }
