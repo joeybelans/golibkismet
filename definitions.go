@@ -23,19 +23,21 @@ type kismetInterface struct {
 }
 
 // Package variables
-var (
-	Version    string                         // Kismet server version
-	StartTime  string                         // Kismet start time
-	Name       string                         // Kismet server name
-	Responses  = make(chan []byte, 5)         // Response channel
-	requests   = map[int]string{}             // Request pipeline
-	interfaces = map[string]kismetInterface{} // Network interfaces
-	server     serverConnection               // Kismet server connection
-	debug      bool                           // Debug flag
-	dumpfiles  []string                       // Dumpfiles - Need to check if needed
-	tstamp     string                         // Last kismet timestamp
-	index      int                            // Command index number
-)
+type KismetVars struct {
+	version    string                     // Kismet server version
+	startTime  string                     // Kismet start time
+	name       string                     // Kismet server name
+	responses  chan []byte                // Response channel
+	requests   map[int]string             // Request pipeline
+	interfaces map[string]kismetInterface // Network interfaces
+	server     serverConnection           // Kismet server connection
+	debug      bool                       // Debug flag
+	dumpfiles  []string                   // Dumpfiles - Need to check if needed
+	tstamp     string                     // Last kismet timestamp
+	index      int                        // Command index number
+	client     map[string][]string        // Client capabilities to enable
+	nic        map[string]string          // Interface to add for Kismet Monitoring
+}
 
 /*
 Capabilities
@@ -82,23 +84,3 @@ type capability struct {
 }
 
 var capabilities = map[string]capability{}
-
-// Kismet response parsers
-var parsers = map[string]interface{}{
-	"KISMET":    parseKISMET,
-	"ERROR":     parseERROR,
-	"ACK":       parseACK,
-	"TERMINATE": parseTERMINATE,
-	"TIME":      parseTIME,
-	"STATUS":    parseSTATUS,
-	"SOURCE":    parseSOURCE,
-	"ALERT":     parseALERT,
-	"BSSID":     parseBSSID,
-	"SSID":      parseSSID,
-	"CLIENT":    parseCLIENT,
-	"BSSIDSRC":  parseBSSIDSRC,
-	"CLISRC":    parseCLISRC,
-	"NETTAG":    parseNETTAG,
-	"CLITAG":    parseCLITAG,
-	"INFO":      parseINFO,
-}
