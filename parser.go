@@ -3,6 +3,7 @@ package golibkismet
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -24,73 +25,80 @@ func parseFields(matches [][]string) []string {
 	return params
 }
 
-func parseKISMET(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseKISMET(fields []string) {
+	if vars.debug {
+		log.Printf("[parseKISMET]: %v\n", fields)
 	}
 
-	Version = fields[1]
-	StartTime = fields[2]
-	Name = fields[3]
+	vars.version = fields[1]
+	vars.startTime = fields[2]
+	vars.name = fields[3]
 }
 
-func parsePROTOCOLS(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parsePROTOCOLS(fields []string) {
+	if vars.debug {
+		log.Printf("[parsePROTOCOLS]: %v\n", fields)
 	}
 
 	var found bool
 	for _, protocol := range strings.Split(fields[1], ",") {
 		if protocol != "PROTOCOLS" && protocol != "CAPABILITY" {
-			_, found = parsers[protocol]
-			if !found && debug {
+			_, found = vars.router(protocol)
+			if !found && vars.debug {
 				fmt.Println("No parser available for protocol: " + protocol)
 			} else {
-				send("CAPABILITY " + protocol)
+				vars.send("CAPABILITY " + protocol)
 			}
 		}
 	}
 }
 
-func parseCAPABILITY(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseCAPABILITY(fields []string) {
+	if vars.debug {
+		log.Printf("[parseCAPABILITY]: %v\n", fields)
 	}
 
 	var available []string
-	_, found := parsers[fields[1]]
+	_, found := vars.router(fields[1])
 	if found {
 		for _, field := range strings.Split(fields[2], ",") {
 			available = append(available, field)
 		}
-		fmt.Println(fields[1] + ": " + strings.Join(available, ","))
+		if vars.debug {
+			log.Printf("[CAPABILITY LIST]: %v\n", strings.Join(available, ","))
+		}
 		capabilities[fields[1]] = capability{available, []string{}}
+
+		// Enable client settings after validating capabilties
+		if len(vars.client) > 0 {
+			vars.enable(fields[1], vars.client[fields[1]])
+		}
 	}
 }
 
-func parseTIME(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseTIME(fields []string) {
+	if vars.debug {
+		log.Printf("[parseTIME]: %v\n", fields)
 	}
-	tstamp = fields[1]
+	vars.tstamp = fields[1]
 }
 
-func parseACK(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseACK(fields []string) {
+	if vars.debug {
+		log.Printf("[parseACK]: %v\n", fields)
 	}
 
 	i, _ := strconv.Atoi(fields[1])
-	delete(requests, i)
-	if debug {
-		fmt.Println("ACK: " + fields[1])
-		fmt.Println("PIPELINE:", requests)
+	delete(vars.requests, i)
+	if vars.debug {
+		log.Printf("[ACK RECEIVED]: %v\n", fields[1])
+		log.Printf("[ACK PIPELINE]: %v\n", vars.requests)
 	}
 }
 
-func parseERROR(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseERROR(fields []string) {
+	if vars.debug {
+		log.Printf("[parseERROR]: %v\n", fields)
 	}
 
 	er := map[string]string{"message": "ERROR"}
@@ -99,19 +107,19 @@ func parseERROR(fields []string) {
 	}
 
 	i, _ := strconv.Atoi(fields[1])
-	delete(requests, i)
-	if debug {
-		fmt.Println("ERROR: " + fields[2])
-		fmt.Println("PIPELINE:", requests)
+	delete(vars.requests, i)
+	if vars.debug {
+		log.Printf("[ERROR ERROR]: %v\n", fields[2])
+		log.Printf("[ERROR PIPELINE]: %v\n", vars.requests)
 	}
 
 	msg, _ := json.Marshal(er)
-	Responses <- msg
+	vars.responses <- msg
 }
 
-func parseSTATUS(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseSTATUS(fields []string) {
+	if vars.debug {
+		log.Printf("[parseSTATUS]: %v\n", fields)
 	}
 
 	status := map[string]string{"message": "STATUS"}
@@ -127,19 +135,19 @@ func parseSTATUS(fields []string) {
 		status["title"] = "STATUS-ERROR"
 
 	default:
-		if debug {
-			fmt.Println("STATUS-OTHER: (" + status["flags"] + ") " + status["text"])
+		if vars.debug {
+			log.Printf("[STATUS-OTHER]: (%v) %v\n", status["flags"], status["test"])
 		}
 		status["title"] = "STATUS-OTHER"
 	}
 
 	msg, _ := json.Marshal(status)
-	Responses <- msg
+	vars.responses <- msg
 }
 
-func parseSOURCE(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseSOURCE(fields []string) {
+	if vars.debug {
+		log.Printf("[parseSOURCE]: %v\n", fields)
 	}
 
 	source := map[string]string{"message": "SOURCE"}
@@ -157,20 +165,20 @@ func parseSOURCE(fields []string) {
 		channels = append(channels, chInt)
 	}
 
-	_, exists := interfaces[name]
+	_, exists := vars.interfaces[name]
 	if !exists {
 		iface, _ := net.InterfaceByName(fields[1])
 		lock := false
-		interfaces[name] = kismetInterface{source["uuid"], source["username"], iface.HardwareAddr.String(), source["type"], lock, velocity, packets, channel, channels}
+		vars.interfaces[name] = kismetInterface{source["uuid"], source["username"], iface.HardwareAddr.String(), source["type"], lock, velocity, packets, channel, channels}
 	} else {
-		nic := interfaces[name]
+		nic := vars.interfaces[name]
 		nic.channel = channel
 		lock := false
 		nic.lock = lock
 		nic.velocity = velocity
 		nic.packets = packets
 		nic.channels = channels
-		interfaces[name] = nic
+		vars.interfaces[name] = nic
 	}
 
 	if source["warning"] != "" {
@@ -181,98 +189,98 @@ func parseSOURCE(fields []string) {
 			"warning": source["warning"],
 		})
 
-		Responses <- msg
+		vars.responses <- msg
 	}
 
 	msg, _ := json.Marshal(source)
-	Responses <- msg
+	vars.responses <- msg
 }
 
-func defaultParser(fields []string) {
+func (vars *KismetVars) defaultParser(fields []string) {
 	capability := map[string]string{"message": fields[0]}
 	for index, field := range capabilities[fields[0]].selected {
 		capability[field] = fields[index+1]
 	}
 	msg, _ := json.Marshal(capability)
-	Responses <- msg
+	vars.responses <- msg
 }
 
-func parseINFO(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseINFO(fields []string) {
+	if vars.debug {
+		log.Printf("[parseINFO]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseALERT(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseALERT(fields []string) {
+	if vars.debug {
+		log.Printf("[parseALERT]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseBSSIDSRC(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseBSSIDSRC(fields []string) {
+	if vars.debug {
+		log.Printf("[parseBSSIDSRC]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseBSSID(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseBSSID(fields []string) {
+	if vars.debug {
+		log.Printf("[parseBSSID]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseSSID(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseSSID(fields []string) {
+	if vars.debug {
+		log.Printf("[parseSSID]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseCLISRC(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseCLISRC(fields []string) {
+	if vars.debug {
+		log.Printf("[parseCLISRC]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseNETTAG(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseNETTAG(fields []string) {
+	if vars.debug {
+		log.Printf("[parseNETTAG]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseCLITAG(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseCLITAG(fields []string) {
+	if vars.debug {
+		log.Printf("[parseCLITAG]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseCLIENT(fields []string) {
-	if debug {
-		fmt.Println(fields)
+func (vars *KismetVars) parseCLIENT(fields []string) {
+	if vars.debug {
+		log.Printf("[parseCLIENT]: %v\n", fields)
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
 
-func parseTERMINATE(fields []string) {
-	if debug {
-		fmt.Println("TERMINATE")
+func (vars *KismetVars) parseTERMINATE(fields []string) {
+	if vars.debug {
+		log.Println("[parseTERMINATE]: TERMINATE")
 	}
 
-	defaultParser(fields)
+	vars.defaultParser(fields)
 }
