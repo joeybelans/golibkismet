@@ -1,4 +1,4 @@
-package golibkismet
+package server
 
 import "net"
 

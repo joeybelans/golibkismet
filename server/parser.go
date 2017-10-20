@@ -1,4 +1,4 @@
-package golibkismet
+package server
 
 import (
 	"encoding/json"
@@ -203,6 +203,14 @@ func (vars *KismetVars) defaultParser(fields []string) {
 	}
 	msg, _ := json.Marshal(capability)
 	vars.responses <- msg
+}
+
+func (vars *KismetVars) parseGPS(fields []string) {
+	if vars.debug {
+		log.Printf("[parseGPS]: %v\n", fields)
+	}
+
+	vars.defaultParser(fields)
 }
 
 func (vars *KismetVars) parseINFO(fields []string) {

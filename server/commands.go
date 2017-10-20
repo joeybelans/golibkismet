@@ -1,4 +1,4 @@
-package golibkismet
+package server
 
 import (
 	"fmt"
@@ -106,6 +106,9 @@ func (vars *KismetVars) KillServer() {
 
 // Kismet router for parser functions
 func (vars *KismetVars) router(field string) (interface{}, bool) {
+	if vars.debug {
+		log.Printf("[Kismet-Router]: %v\n", field)
+	}
 	// Kismet response parsers
 	var parsers = map[string]interface{}{
 		"KISMET":    vars.parseKISMET,
@@ -124,9 +127,59 @@ func (vars *KismetVars) router(field string) (interface{}, bool) {
 		"NETTAG":    vars.parseNETTAG,
 		"CLITAG":    vars.parseCLITAG,
 		"INFO":      vars.parseINFO,
+		"GPS":       vars.parseGPS,
 	}
 	if val, ok := parsers[field]; ok {
 		return val, ok
 	}
 	return nil, false
+}
+
+// Enable KismetServer client filters
+func Features(opt string) map[string][]string {
+	switch opt {
+	case "warwalk":
+		return map[string][]string{
+			"GPS": []string{"lat", "lon", "alt", "spd", "heading", "fix", "connected"},
+			"SSID": []string{"mac", "checksum", "type", "ssid", "beaconinfo", "cryptset", "cloaked", "firsttime",
+				"lasttime", "maxrate", "beaconrate", "packets", "beacons", "dot11d"},
+			"BSSID": []string{"bssid", "type", "llcpackets", "datapackets", "cryptpackets", "manuf", "channel",
+				"firsttime", "lasttime", "atype", "rangeip", "netmaskip", "gatewayip", "signal_dbm", "minsignal_dbm", "maxsignal_dbm"},
+			"ERROR": []string{"cmdid", "text"},
+		}
+	case "gps-bssid":
+		return map[string][]string{
+			"GPS": []string{"lat", "lon", "alt", "spd", "heading", "fix", "connected"},
+			"BSSID": []string{"bssid", "type", "llcpackets", "datapackets", "cryptpackets", "manuf", "channel",
+				"firsttime", "lasttime", "atype", "rangeip", "netmaskip", "gatewayip", "signal_dbm", "minsignal_dbm", "maxsignal_dbm"},
+		}
+	default:
+		return map[string][]string{
+			"INFO":      []string{"packets", "rate", "crypt", "dropped", "filtered", "llcpackets", "datapackets"},
+			"STATUS":    []string{"text", "flags"},
+			"ERROR":     []string{"cmdid", "text"},
+			"ACK":       []string{"cmdid", "text"},
+			"TERMINATE": []string{"text"},
+			"TIME":      []string{"timesec"},
+			"SOURCE": []string{"interface", "type", "username", "channel", "uuid", "packets", "hop", "velocity",
+				"dwell", "hop_time_sec", "hop_time_usec", "channellist", "error", "warning"},
+			"ALERT": []string{"sec", "usec", "header", "bssid", "source", "dest", "other", "channel", "text"},
+			"BSSID": []string{"bssid", "type", "llcpackets", "datapackets", "cryptpackets", "manuf", "channel",
+				"firsttime", "lasttime", "atype", "rangeip", "netmaskip", "gatewayip", "signal_dbm", "minsignal_dbm", "maxsignal_dbm"},
+			"SSID": []string{"mac", "checksum", "type", "ssid", "beaconinfo", "cryptset", "cloaked", "firsttime",
+				"lasttime", "maxrate", "beaconrate", "packets", "beacons", "dot11d"},
+			"CLIENT": []string{"bssid", "mac", "type", "firsttime", "lasttime", "manuf", "llcpackets", "datapackets",
+				"cryptpackets", "gpsfixed", "minlat", "minlon", "minalt", "maxlat", "maxlon", "maxalt", "agglat", "agglon",
+				"aggalt", "signal_dbm", "noise_dbm", "minsignal_dbm", "minnoise_dbm", "maxsignal_dbm", "maxnoise_dbm",
+				"signal_rssi", "noise_rssi", "minsignal_rssi", "minnoise_rssi", "maxsignal_rssi", "maxnoise_rssi", "bestlat",
+				"bestlon", "bestalt", "atype", "ip", "gatewayip", "datasize", "maxseenrate", "encodingset", "carrierset",
+				"decrypted", "channel", "fragments", "retries", "newpackets", "freqmhz", "cdpdevice", "cdpport", "dhcphost",
+				"dhcpvendor", "datacryptset"},
+			"BSSIDSRC": []string{"bssid", "uuid", "lasttime", "numpackets"},
+			"CLISRC":   []string{"bssid", "mac", "uuid", "lasttime", "numpackets", "signal_dbm", "minsignal_dbm", "maxsignal_dbm"},
+			"NETTAG":   []string{"bssid", "tag", "value"},
+			"GPS":      []string{"lat", "lon", "alt", "spd", "heading", "fix", "connected"},
+			"CLITAG":   []string{"bssid", "mac", "tag", "value"},
+		}
+	}
 }

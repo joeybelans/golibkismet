@@ -1,5 +1,5 @@
 // Kismet client interface
-package golibkismet
+package server
 
 import (
 	"bufio"
@@ -81,7 +81,7 @@ func (vars *KismetVars) listen() {
 		} else if fields[0] == "CAPABILITY" {
 			vars.parseCAPABILITY(fields)
 		} else if vars.debug {
-			fmt.Println("UNKNOWN CMD: " + fields[0])
+			log.Println("[Kismet UNKNOWN CMD]: " + fields[0])
 		}
 	}
 }
